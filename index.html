@@ -4,56 +4,58 @@
     <meta charset="UTF-8">
     <title>PNG Editor (Hybrid)</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 50px; 
-            display: flex; 
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+            display: flex;
         }
-        .left-container { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 10px; 
-            width: 30%; 
+        .left-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 30%;
         }
-        .right-container { 
-            display: flex; 
-            gap: 10px; 
+        .right-container {
+            display: flex;
+            gap: 10px;
             align-items: flex-start;
         }
-        #hexData, #idatHexData { 
-            font-size: 11px; 
-            resize: horizontal; 
-            overflow: auto; 
-            white-space: nowrap; 
-            font-family: monospace; 
-            padding: 5px; 
+        #hexData, #idatHexData, #base64Data {
+            font-size: 11px;
+            resize: horizontal;
+            overflow: auto;
+            white-space: nowrap;
+            font-family: monospace;
+            padding: 5px;
         }
-        #zlibData { 
-            width: 20%; 
-            font-family: monospace; 
-            resize: vertical; 
+        #zlibData {
+            width: 20%;
+            font-family: monospace;
+            resize: vertical;
         }
-        #imageCanvas { 
+        #imageCanvas {
             align-self: flex-start;
         }
-        #error { 
-            color: red; 
+        #error {
+            color: red;
         }
-        #colorPicker { 
-            width: 100px; 
-            cursor: pointer; 
+        #colorPicker {
+            width: 100px;
+            cursor: pointer;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.0.4/pako.min.js"></script>
 </head>
 <body>
     <div class="left-container">
-	<div><center>Разбираем самый маленький PNG в мире</center></div>
+        <div><center>Разбираем самый маленький PNG в мире</center></div>
         <input type="file" id="fileInput" accept=".png">
         <br><br><label>HEX Data:</label>
         <textarea id="hexData" placeholder="Enter HEX data here or load a file"></textarea>
         <br><label>Packed IDAT HEX Data:</label>
         <textarea id="idatHexData" placeholder="Packed IDAT data will appear here"></textarea>
+        <br><label>Base64 (data:image/png;base64):</label>
+        <textarea id="base64Data" placeholder="Paste or copy base64 image here"></textarea>
         <div id="error"></div>
     </div>
     <div class="right-container">
@@ -68,6 +70,7 @@
         const fileInput = document.getElementById('fileInput');
         const hexData = document.getElementById('hexData');
         const idatHexData = document.getElementById('idatHexData');
+        const base64Data = document.getElementById('base64Data');
         const zlibData = document.getElementById('zlibData');
         const imageCanvas = document.getElementById('imageCanvas');
         const errorDiv = document.getElementById('error');
@@ -137,6 +140,14 @@
                 imageCanvas.style.height = `${displayHeight}px`;
 
                 originalImageData = ctx.getImageData(0, 0, img.width, img.height);
+
+                // Отображаем base64 строку
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    base64Data.value = e.target.result;
+                };
+                reader.readAsDataURL(blob);
+
                 URL.revokeObjectURL(url);
             };
             img.onerror = () => { errorDiv.textContent = 'Error: Invalid PNG data'; };
@@ -189,9 +200,9 @@
             document.body.removeChild(tempSpan);
             hexData.style.width = `${textWidth}px`;
             idatHexData.style.width = `${textWidth}px`;
+            base64Data.style.width = `${textWidth}px`;
         }
 
-        // Загрузка изображения по умолчанию
         const defaultHex = "89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 01 00 00 00 01 08 00 00 00 00 3a 7e 9b 55 00 00 00 0a 49 44 41 54 78 01 63 b0 05 00 00 3f 00 3e 12 ae c8 10 00 00 00 00 49 45 4e 44 ae 42 60 82";
         processBytes(hexToBytes(defaultHex));
 
@@ -217,7 +228,6 @@
 
         colorPicker.addEventListener('input', () => {
             if (!originalImageData) return;
-
             const hexColor = colorPicker.value;
             const r = parseInt(hexColor.slice(1, 3), 16);
             const g = parseInt(hexColor.slice(3, 5), 16);
@@ -230,9 +240,9 @@
             );
 
             for (let i = 0; i < newImageData.data.length; i += 4) {
-                newImageData.data[i] = r;     // Red
-                newImageData.data[i + 1] = g; // Green
-                newImageData.data[i + 2] = b; // Blue
+                newImageData.data[i] = r;
+                newImageData.data[i + 1] = g;
+                newImageData.data[i + 2] = b;
             }
 
             ctx.putImageData(newImageData, 0, 0);
@@ -240,12 +250,30 @@
 
         exportButton.addEventListener('click', () => {
             if (!originalBytes) return;
-
             const dataUrl = imageCanvas.toDataURL('image/png');
             const link = document.createElement('a');
             link.href = dataUrl;
             link.download = 'edited_image.png';
             link.click();
+        });
+
+        base64Data.addEventListener('blur', () => {
+            const base64 = base64Data.value.trim();
+            if (!base64.startsWith("data:image/png;base64,")) {
+                errorDiv.textContent = "Error: base64 string must start with data:image/png;base64,";
+                return;
+            }
+
+            try {
+                const binaryString = atob(base64.split(',')[1]);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                processBytes(bytes);
+            } catch (e) {
+                errorDiv.textContent = "Error: Invalid base64 input.";
+            }
         });
     </script>
 </body>
